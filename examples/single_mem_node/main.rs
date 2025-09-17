@@ -137,7 +137,7 @@ fn on_ready(raft_group: &mut RawNode<MemStorage>, cbs: &mut HashMap<u8, ProposeC
                 continue;
             }
 
-            if entry.get_entry_type() == EntryType::EntryNormal {
+            if entry.entry_type() == EntryType::EntryNormal {
                 if let Some(cb) = cbs.remove(entry.data.first().unwrap()) {
                     cb();
                 }

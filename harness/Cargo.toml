@@ -12,11 +12,9 @@ categories = []
 edition = "2018"
 
 [features]
-default = ["protobuf-codec", "raft/default-logger"]
+default = ["raft/default-logger"]
 # Enable failpoints
 failpoints = ["fail/failpoints"]
-protobuf-codec = ["raft/protobuf-codec"]
-prost-codec = ["raft/prost-codec"]
 
 # Make sure to synchronize updates with Raft.
 [dependencies]
@@ -30,5 +28,5 @@ slog = "2.2"
 criterion = "0.3"
 fxhash = "0.2.1"
 lazy_static = "1"
-protobuf = "2"
+protobuf = { workspace = true }
 regex = "1"

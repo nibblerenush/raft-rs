@@ -487,7 +487,7 @@ impl<T: Storage> RaftLog<T> {
     /// Returns the current snapshot
     pub fn snapshot(&self, request_index: u64, to: u64) -> Result<Snapshot> {
         if let Some(snap) = self.unstable.snapshot.as_ref() {
-            if snap.get_metadata().index >= request_index {
+            if snap.metadata().index >= request_index {
                 return Ok(snap.clone());
             }
         }
@@ -553,7 +553,7 @@ impl<T: Storage> RaftLog<T> {
         // because the first_update_index means there are snapshot or some entries whose indexes
         // are greater than or equal to the first_update_index have not been persisted yet.
         let first_update_index = match &self.unstable.snapshot {
-            Some(s) => s.get_metadata().index,
+            Some(s) => s.metadata().index,
             None => self.unstable.offset,
         };
         if index > self.persisted
@@ -690,10 +690,10 @@ impl<T: Storage> RaftLog<T> {
             self.unstable.logger,
             "log [{log}] starts to restore snapshot [index: {snapshot_index}, term: {snapshot_term}]",
             log = self.to_string(),
-            snapshot_index = snapshot.get_metadata().index,
-            snapshot_term = snapshot.get_metadata().term,
+            snapshot_index = snapshot.metadata().index,
+            snapshot_term = snapshot.metadata().term,
         );
-        let index = snapshot.get_metadata().index;
+        let index = snapshot.metadata().index;
         assert!(index >= self.committed, "{} < {}", index, self.committed);
         // If `persisted` is greater than `committed`, reset it to `committed`.
         // It's because only the persisted entries whose index are less than `committed` can be
@@ -1081,7 +1081,7 @@ mod test {
             raft_log.append(new_ents);
             let unstable = raft_log.unstable_entries().to_vec();
             if let Some(e) = unstable.last() {
-                raft_log.stable_entries(e.get_index(), e.get_term());
+                raft_log.stable_entries(e.index(), e.term());
                 raft_log.mut_store().wl().append(&unstable).expect("");
             }
             let is_changed = raft_log.persisted != wpersist;
@@ -1129,7 +1129,7 @@ mod test {
 
             let ents = raft_log.unstable_entries().to_vec();
             if let Some(e) = ents.last() {
-                raft_log.stable_entries(e.get_index(), e.get_term());
+                raft_log.stable_entries(e.index(), e.term());
             }
             if &ents != wents {
                 panic!("#{}: unstableEnts = {:?}, want {:?}", i, ents, wents);
@@ -1179,7 +1179,7 @@ mod test {
             raft_log.append(&ents);
             let unstable = raft_log.unstable_entries().to_vec();
             if let Some(e) = unstable.last() {
-                raft_log.stable_entries(e.get_index(), e.get_term());
+                raft_log.stable_entries(e.index(), e.term());
                 raft_log.mut_store().wl().append(&unstable).expect("");
             }
             raft_log.maybe_persist(persisted, 1);
@@ -1266,7 +1266,7 @@ mod test {
             raft_log.append(&ents);
             let unstable = raft_log.unstable_entries().to_vec();
             if let Some(e) = unstable.last() {
-                raft_log.stable_entries(e.get_index(), e.get_term());
+                raft_log.stable_entries(e.index(), e.term());
                 raft_log.mut_store().wl().append(&unstable).expect("");
             }
             raft_log.maybe_persist(persisted, 1);

@@ -511,7 +511,7 @@ impl Storage for MemStorage {
             Err(Error::Store(StorageError::SnapshotTemporarilyUnavailable))
         } else {
             let mut snap = core.snapshot();
-            if snap.get_metadata().index < request_index {
+            if snap.metadata().index < request_index {
                 snap.mut_metadata().index = request_index;
             }
             Ok(snap)
@@ -537,7 +537,7 @@ mod test {
         e
     }
 
-    fn size_of<T: PbMessage>(m: &T) -> u32 {
+    fn size_of<T: PbMessage>(m: &T) -> u64 {
         m.compute_size()
     }
 

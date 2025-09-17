@@ -112,7 +112,7 @@ impl UncommittedState {
             return true;
         }
 
-        let size: usize = ents.iter().map(|ent| ent.get_data().len()).sum();
+        let size: usize = ents.iter().map(|ent| ent.data().len()).sum();
 
         // 1. we should never drop an entry without any data(eg. leader election)
         // 2. we should allow at least one uncommitted entry
@@ -138,7 +138,7 @@ impl UncommittedState {
         let size: usize = ents
             .iter()
             .skip_while(|ent| ent.index <= self.last_log_tail_index)
-            .map(|ent| ent.get_data().len())
+            .map(|ent| ent.data().len())
             .sum();
 
         if size > self.uncommitted_size {
@@ -622,10 +622,10 @@ impl<T: Storage> RaftCore<T> {
         if m.from == INVALID_ID {
             m.from = self.id;
         }
-        if m.get_msg_type() == MessageType::MsgRequestVote
-            || m.get_msg_type() == MessageType::MsgRequestPreVote
-            || m.get_msg_type() == MessageType::MsgRequestVoteResponse
-            || m.get_msg_type() == MessageType::MsgRequestPreVoteResponse
+        if m.msg_type() == MessageType::MsgRequestVote
+            || m.msg_type() == MessageType::MsgRequestPreVote
+            || m.msg_type() == MessageType::MsgRequestVoteResponse
+            || m.msg_type() == MessageType::MsgRequestPreVoteResponse
         {
             if m.term == 0 {
                 // All {pre-,}campaign messages need to have the term set when
@@ -643,7 +643,7 @@ impl<T: Storage> RaftCore<T> {
                 fatal!(
                     self.logger,
                     "term should be set when sending {:?}",
-                    m.get_msg_type()
+                    m.msg_type()
                 );
             }
         } else {
@@ -651,7 +651,7 @@ impl<T: Storage> RaftCore<T> {
                 fatal!(
                     self.logger,
                     "term should not be set when sending {:?} (was {})",
-                    m.get_msg_type(),
+                    m.msg_type(),
                     m.term
                 );
             }
@@ -659,14 +659,13 @@ impl<T: Storage> RaftCore<T> {
             // proposals are a way to forward to the leader and
             // should be treated as local message.
             // MsgReadIndex is also forwarded to leader.
-            if m.get_msg_type() != MessageType::MsgPropose
-                && m.get_msg_type() != MessageType::MsgReadIndex
+            if m.msg_type() != MessageType::MsgPropose && m.msg_type() != MessageType::MsgReadIndex
             {
                 m.term = self.term;
             }
         }
-        if m.get_msg_type() == MessageType::MsgRequestVote
-            || m.get_msg_type() == MessageType::MsgRequestPreVote
+        if m.msg_type() == MessageType::MsgRequestVote
+            || m.msg_type() == MessageType::MsgRequestPreVote
         {
             if self.priority > 0 {
                 m.deprecated_priority = self.priority as u64;
@@ -701,10 +700,10 @@ impl<T: Storage> RaftCore<T> {
             fatal!(self.logger, "unexpected error: {:?}", e);
         }
         let snapshot = snapshot_r.unwrap();
-        if snapshot.get_metadata().index == 0 {
+        if snapshot.metadata().index == 0 {
             fatal!(self.logger, "need non-empty snapshot");
         }
-        let (sindex, sterm) = (snapshot.get_metadata().index, snapshot.get_metadata().term);
+        let (sindex, sterm) = (snapshot.metadata().index, snapshot.metadata().term);
         m.set_snapshot(snapshot);
         debug!(
             self.logger,
@@ -755,7 +754,7 @@ impl<T: Storage> RaftCore<T> {
         // will append the entries to the existing MsgAppend
         let mut is_batched = false;
         for msg in msgs {
-            if msg.get_msg_type() == MessageType::MsgAppend && msg.to == to {
+            if msg.msg_type() == MessageType::MsgAppend && msg.to == to {
                 if !ents.is_empty() {
                     if !util::is_continuous_ents(msg, ents) {
                         return is_batched;
@@ -1348,8 +1347,8 @@ impl<T: Storage> Raft<T> {
         if m.term == 0 {
             // local message
         } else if m.term > self.term {
-            if m.get_msg_type() == MessageType::MsgRequestVote
-                || m.get_msg_type() == MessageType::MsgRequestPreVote
+            if m.msg_type() == MessageType::MsgRequestVote
+                || m.msg_type() == MessageType::MsgRequestPreVote
             {
                 let force = m.context == CAMPAIGN_TRANSFER;
                 let in_lease = self.check_quorum
@@ -1375,7 +1374,7 @@ impl<T: Storage> Raft<T> {
                         msg_index = m.index;
                         "term" => self.term,
                         "remaining ticks" => self.election_timeout - self.election_elapsed,
-                        "msg type" => ?m.get_msg_type(),
+                        "msg type" => ?m.msg_type(),
                         "leader_id" => self.leader_id,
                     );
 
@@ -1383,8 +1382,8 @@ impl<T: Storage> Raft<T> {
                 }
             }
 
-            if m.get_msg_type() == MessageType::MsgRequestPreVote
-                || (m.get_msg_type() == MessageType::MsgRequestPreVoteResponse && !m.reject)
+            if m.msg_type() == MessageType::MsgRequestPreVote
+                || (m.msg_type() == MessageType::MsgRequestPreVoteResponse && !m.reject)
             {
                 // For a pre-vote request:
                 // Never change our term in response to a pre-vote request.
@@ -1402,11 +1401,11 @@ impl<T: Storage> Raft<T> {
                     from = m.from;
                     "term" => self.term,
                     "message_term" => m.term,
-                    "msg type" => ?m.get_msg_type(),
+                    "msg type" => ?m.msg_type(),
                 );
-                if m.get_msg_type() == MessageType::MsgAppend
-                    || m.get_msg_type() == MessageType::MsgHeartbeat
-                    || m.get_msg_type() == MessageType::MsgSnapshot
+                if m.msg_type() == MessageType::MsgAppend
+                    || m.msg_type() == MessageType::MsgHeartbeat
+                    || m.msg_type() == MessageType::MsgSnapshot
                 {
                     self.become_follower(m.term, m.from);
                 } else {
@@ -1415,8 +1414,8 @@ impl<T: Storage> Raft<T> {
             }
         } else if m.term < self.term {
             if (self.check_quorum || self.pre_vote)
-                && (m.get_msg_type() == MessageType::MsgHeartbeat
-                    || m.get_msg_type() == MessageType::MsgAppend)
+                && (m.msg_type() == MessageType::MsgHeartbeat
+                    || m.msg_type() == MessageType::MsgAppend)
             {
                 // We have received messages from a leader at a lower term. It is possible
                 // that these messages were simply delayed in the network, but this could
@@ -1441,7 +1440,7 @@ impl<T: Storage> Raft<T> {
                 // fresh election. This can be prevented with Pre-Vote phase.
                 let to_send = new_message(m.from, MessageType::MsgAppendResponse, None);
                 self.r.send(to_send, &mut self.msgs);
-            } else if m.get_msg_type() == MessageType::MsgRequestPreVote {
+            } else if m.msg_type() == MessageType::MsgRequestPreVote {
                 // Before pre_vote enable, there may be a receiving candidate with higher term,
                 // but less log. After update to pre_vote, the cluster may deadlock if
                 // we drop messages with a lower term.
@@ -1452,7 +1451,7 @@ impl<T: Storage> Raft<T> {
                     self.raft_log.last_term(),
                     self.raft_log.last_index(),
                     self.vote,
-                    m.get_msg_type(),
+                    m.msg_type(),
                     m.from,
                     m.log_term,
                     m.index,
@@ -1470,7 +1469,7 @@ impl<T: Storage> Raft<T> {
                     "ignored a message with lower term from {from}",
                     from = m.from;
                     "term" => self.term,
-                    "msg type" => ?m.get_msg_type(),
+                    "msg type" => ?m.msg_type(),
                     "msg term" => m.term
                 );
             }
@@ -1480,7 +1479,7 @@ impl<T: Storage> Raft<T> {
         #[cfg(feature = "failpoints")]
         fail_point!("before_step");
 
-        match m.get_msg_type() {
+        match m.msg_type() {
             MessageType::MsgHup => self.hup(false),
             MessageType::MsgRequestVote | MessageType::MsgRequestPreVote => {
                 // We can vote if this is a repeat of a vote we've already cast...
@@ -1488,7 +1487,7 @@ impl<T: Storage> Raft<T> {
                     // ...we haven't voted and we don't think there's a leader yet in this term...
                     (self.vote == INVALID_ID && self.leader_id == INVALID_ID) ||
                     // ...or this is a PreVote for a future term...
-                    (m.get_msg_type() == MessageType::MsgRequestPreVote && m.term > self.term);
+                    (m.msg_type() == MessageType::MsgRequestPreVote && m.term > self.term);
                 // ...and we believe the candidate is up to date.
                 if can_vote
                     && self.raft_log.is_up_to_date(m.index, m.log_term)
@@ -1504,20 +1503,18 @@ impl<T: Storage> Raft<T> {
                     // The term in the original message and current local term are the
                     // same in the case of regular votes, but different for pre-votes.
                     self.log_vote_approve(&m);
-                    let mut to_send =
-                        new_message(m.from, vote_resp_msg_type(m.get_msg_type()), None);
+                    let mut to_send = new_message(m.from, vote_resp_msg_type(m.msg_type()), None);
                     to_send.reject = false;
                     to_send.term = m.term;
                     self.r.send(to_send, &mut self.msgs);
-                    if m.get_msg_type() == MessageType::MsgRequestVote {
+                    if m.msg_type() == MessageType::MsgRequestVote {
                         // Only record real votes.
                         self.election_elapsed = 0;
                         self.vote = m.from;
                     }
                 } else {
                     self.log_vote_reject(&m);
-                    let mut to_send =
-                        new_message(m.from, vote_resp_msg_type(m.get_msg_type()), None);
+                    let mut to_send = new_message(m.from, vote_resp_msg_type(m.msg_type()), None);
                     to_send.reject = true;
                     to_send.term = self.term;
                     let (commit, commit_term) = self.raft_log.commit_info();
@@ -1594,8 +1591,8 @@ impl<T: Storage> Raft<T> {
         let page_size = self.max_committed_size_per_ready;
         if let Err(err) = self.raft_log.scan(lo, hi, page_size, context, |ents| {
             for e in ents {
-                if e.get_entry_type() == EntryType::EntryConfChange
-                    || e.get_entry_type() == EntryType::EntryConfChangeV2
+                if e.entry_type() == EntryType::EntryConfChange
+                    || e.entry_type() == EntryType::EntryConfChangeV2
                 {
                     found = true;
                     return false;
@@ -1626,7 +1623,7 @@ impl<T: Storage> Raft<T> {
             msg_term = m.log_term,
             msg_index = m.index,
             term = self.term;
-            "msg type" => ?m.get_msg_type(),
+            "msg type" => ?m.msg_type(),
         );
     }
 
@@ -1642,7 +1639,7 @@ impl<T: Storage> Raft<T> {
             msg_term = m.log_term,
             msg_index = m.index,
             term = self.term;
-            "msg type" => ?m.get_msg_type(),
+            "msg type" => ?m.msg_type(),
         );
     }
 
@@ -1829,7 +1826,7 @@ impl<T: Storage> Raft<T> {
                     pr.become_probe();
                 }
             }
-            ProgressState::Replicate => pr.ins.free_to(m.get_index()),
+            ProgressState::Replicate => pr.ins.free_to(m.index()),
         }
 
         if self.maybe_commit() {
@@ -2044,7 +2041,7 @@ impl<T: Storage> Raft<T> {
 
     fn step_leader(&mut self, mut m: Message) -> Result<()> {
         // These message types do not require any progress for m.From.
-        match m.get_msg_type() {
+        match m.msg_type() {
             MessageType::MsgBeat => {
                 self.bcast_heartbeat();
                 return Ok(());
@@ -2083,16 +2080,16 @@ impl<T: Storage> Raft<T> {
 
                 for (i, e) in m.mut_entries().iter_mut().enumerate() {
                     let mut cc;
-                    if e.get_entry_type() == EntryType::EntryConfChange {
+                    if e.entry_type() == EntryType::EntryConfChange {
                         let mut cc_v1 = ConfChange::default();
-                        if let Err(e) = cc_v1.merge_from_bytes(e.get_data()) {
+                        if let Err(e) = cc_v1.merge_from_bytes(e.data()) {
                             error!(self.logger, "invalid confchange"; "error" => ?e);
                             return Err(Error::ProposalDropped);
                         }
                         cc = cc_v1.into_v2();
-                    } else if e.get_entry_type() == EntryType::EntryConfChangeV2 {
+                    } else if e.entry_type() == EntryType::EntryConfChangeV2 {
                         cc = ConfChangeV2::default();
-                        if let Err(e) = cc.merge_from_bytes(e.get_data()) {
+                        if let Err(e) = cc.merge_from_bytes(e.data()) {
                             error!(self.logger, "invalid confchangev2"; "error" => ?e);
                             return Err(Error::ProposalDropped);
                         }
@@ -2181,7 +2178,7 @@ impl<T: Storage> Raft<T> {
             _ => {}
         }
 
-        match m.get_msg_type() {
+        match m.msg_type() {
             MessageType::MsgAppendResponse => {
                 self.handle_append_response(&m);
             }
@@ -2285,7 +2282,7 @@ impl<T: Storage> Raft<T> {
     // step_candidate is shared by state Candidate and PreCandidate; the difference is
     // whether they respond to MsgRequestVote or MsgRequestPreVote.
     fn step_candidate(&mut self, m: Message) -> Result<()> {
-        match m.get_msg_type() {
+        match m.msg_type() {
             MessageType::MsgPropose => {
                 info!(
                     self.logger,
@@ -2314,14 +2311,14 @@ impl<T: Storage> Raft<T> {
                 // state Candidate, we may get stale MsgPreVoteResp messages in this term from
                 // our pre-candidate state).
                 if (self.state == StateRole::PreCandidate
-                    && m.get_msg_type() != MessageType::MsgRequestPreVoteResponse)
+                    && m.msg_type() != MessageType::MsgRequestPreVoteResponse)
                     || (self.state == StateRole::Candidate
-                        && m.get_msg_type() != MessageType::MsgRequestVoteResponse)
+                        && m.msg_type() != MessageType::MsgRequestVoteResponse)
                 {
                     return Ok(());
                 }
 
-                self.poll(m.from, m.get_msg_type(), !m.reject);
+                self.poll(m.from, m.msg_type(), !m.reject);
                 self.maybe_commit_by_vote(&m);
             }
             MessageType::MsgTimeoutNow => debug!(
@@ -2337,7 +2334,7 @@ impl<T: Storage> Raft<T> {
     }
 
     fn step_follower(&mut self, mut m: Message) -> Result<()> {
-        match m.get_msg_type() {
+        match m.msg_type() {
             MessageType::MsgPropose => {
                 if self.leader_id == INVALID_ID {
                     info!(
@@ -2565,7 +2562,7 @@ impl<T: Storage> Raft<T> {
     }
 
     fn handle_snapshot(&mut self, mut m: Message) {
-        let metadata = m.get_snapshot().get_metadata();
+        let metadata = m.snapshot().metadata();
         let (sindex, sterm) = (metadata.index, metadata.term);
         if self.restore(m.take_snapshot()) {
             info!(
@@ -2600,7 +2597,7 @@ impl<T: Storage> Raft<T> {
     /// Recovers the state machine from a snapshot. It restores the log and the
     /// configuration of state machine.
     pub fn restore(&mut self, snap: Snapshot) -> bool {
-        if snap.get_metadata().index < self.raft_log.committed {
+        if snap.metadata().index < self.raft_log.committed {
             return false;
         }
         if self.state != StateRole::Follower {
@@ -2619,14 +2616,14 @@ impl<T: Storage> Raft<T> {
         // More defense-in-depth: throw away snapshot if recipient is not in the
         // config. This shouldn't ever happen (at the time of writing) but lots of
         // code here and there assumes that r.id is in the progress tracker.
-        let meta = snap.get_metadata();
+        let meta = snap.metadata();
         let (snap_index, snap_term) = (meta.index, meta.term);
-        let cs = meta.get_conf_state();
+        let cs = meta.conf_state();
         if cs
-            .get_voters()
+            .voters()
             .iter()
-            .chain(cs.get_learners())
-            .chain(cs.get_voters_outgoing())
+            .chain(cs.learners())
+            .chain(cs.voters_outgoing())
             // `learners_next` doesn't need to be checked. According to the rules, if a peer in
             // `learners_next`, it has to be in `voters_outgoing`.
             .all(|id| *id != self.id)
@@ -2659,8 +2656,8 @@ impl<T: Storage> Raft<T> {
             .raft_log
             .pending_snapshot()
             .unwrap()
-            .get_metadata()
-            .get_conf_state();
+            .metadata()
+            .conf_state();
 
         self.prs.clear();
         let last_index = self.raft_log.last_index();
@@ -2675,8 +2672,8 @@ impl<T: Storage> Raft<T> {
             .raft_log
             .pending_snapshot()
             .unwrap()
-            .get_metadata()
-            .get_conf_state();
+            .metadata()
+            .conf_state();
         if !raft_proto::conf_state_eq(cs, &new_cs) {
             fatal!(self.logger, "invalid restore: {:?} != {:?}", cs, new_cs);
         }
@@ -2919,7 +2916,7 @@ impl<T: Storage> Raft<T> {
             warn!(
                 self.r.logger,
                 "try to reduce uncommitted size less than 0, first index of pending ents is {}",
-                ents[0].get_index()
+                ents[0].index()
             );
         }
     }

@@ -209,8 +209,8 @@ fn test_request_snapshot() {
     assert!(sm.prs().get(2).unwrap().is_paused());
     let snap = sm.msgs.pop().unwrap();
     assert!(
-        snap.get_msg_type() == MessageType::MsgSnapshot
-            && snap.get_snapshot().get_metadata().index == request_snapshot_idx,
+        snap.msg_type() == MessageType::MsgSnapshot
+            && snap.snapshot().metadata().index == request_snapshot_idx,
         "{:?}",
         snap
     );

@@ -292,7 +292,7 @@ by one:
             continue;
         }
 
-        match entry.get_entry_type() {
+        match entry.entry_type() {
             EntryType::EntryNormal => handle_normal(entry),
             // It's recommended to always use `EntryType::EntryConfChangeV2.
             EntryType::EntryConfChange => handle_conf_change(entry),
